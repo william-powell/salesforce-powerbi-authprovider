@@ -1,0 +1,132 @@
+global class PowerBIAuthProvider extends Auth.AuthProviderPluginClass {
+      public static string POWERBI_RESOURCE_URI = 'https://analysis.windows.net/powerbi/api';
+	  public static string WINDOWSNET_LOGIN_BASE_ADDRESS = 'https://login.windows.net/';
+	  public static string WINDOWSNET_AUTHORIZE_ENDPOINT = 'common/oauth2/authorize';
+	  public static string WINDOWSNET_TOKEN_ENDPOINT = '/oauth2/token';
+
+	  private String authProvider = 'Power BI'; 
+      
+      private String customMetadataTypeApiName = 'PowerBI_Auth_Settings__mdt'; 
+      
+      global String getCustomMetadataType() {
+          return customMetadataTypeApiName;
+      }        
+    
+      global PageReference initiate(Map<string,string> authProviderConfiguration, String stateToPropagate) { 
+            Map<String, String> urlParams = new Map<String, String> {
+                'client_id' => authProviderConfiguration.get('ClientId__c'),
+                'redirect_uri' => authProviderConfiguration.get('Callback__c'),
+                'resource' => POWERBI_RESOURCE_URI,
+                'response_type' => 'code',
+                'state' => stateToPropagate
+            };
+            
+            String auth_url = WINDOWSNET_LOGIN_BASE_ADDRESS + WINDOWSNET_AUTHORIZE_ENDPOINT;
+            
+            PageReference ref = new PageReference(auth_url);
+       		ref.getParameters().putAll(urlParams);
+          
+            return ref; 
+        } 
+    
+        global Auth.AuthProviderTokenResponse handleCallback(Map<string,string> authProviderConfiguration, Auth.AuthProviderCallbackState state) { 
+            String clientId = authProviderConfiguration.get('ClientId__c'); 
+            String clientSecret = authProviderConfiguration.get('ClientSecret__c'); 
+            String username = authProviderConfiguration.get('Username__c'); 
+            String password = authProviderConfiguration.get('Password__c'); 
+            String tenantId = authProviderConfiguration.get('TenantId__c'); 
+            
+            HttpRequest req = new HttpRequest(); 
+            
+            req.setEndpoint(WINDOWSNET_LOGIN_BASE_ADDRESS + tenantId + WINDOWSNET_TOKEN_ENDPOINT); 
+            
+			Map<String,String> queryParams = state.queryParameters; 
+            String code = queryParams.get('code');
+    		String sfdcState = queryParams.get('state');
+            
+            Map<String, String> body = new Map<String, String>{
+                'grant_type'    => 'password',
+                'client_id'     => clientId,
+                'client_secret' => clientSecret,
+                'resource'  	=> POWERBI_RESOURCE_URI,
+                'username'      => username,
+                'password'      => password
+            };
+            
+            req.setHeader('Content-Type', 'application/x-www-form-urlencoded');
+        	req.setMethod('POST');
+        	req.setBody(createURLParameters(body));
+            
+            Http http = new Http(); 
+            HTTPResponse res = http.send(req); 
+            String responseBody = res.getBody(); 
+            System.debug(responseBody);
+            
+            PowerBIResponse pbiResponse = getPowerBiResponse(responseBody);
+            
+            return new Auth.AuthProviderTokenResponse('PowerBI', pbiResponse.access_token, pbiResponse.refresh_token, sfdcState);
+        } 
+      
+        global override Auth.OAuthRefreshResult refresh(Map<String,String> authProviderConfiguration, String refreshToken) {
+            String clientId = authProviderConfiguration.get('ClientId__c'); 
+            String clientSecret = authProviderConfiguration.get('ClientSecret__c');
+            String tenantId = authProviderConfiguration.get('TenantId__c'); 
+            
+            HttpRequest req = new HttpRequest(); 
+            req.setEndpoint(WINDOWSNET_LOGIN_BASE_ADDRESS + tenantId + WINDOWSNET_TOKEN_ENDPOINT);
+            
+            Map<String, String> body = new Map<String, String>{
+                'grant_type'    => 'refresh_token',
+                'client_id'     => clientId,
+                'client_secret' => clientSecret,
+                'refresh_token' => refreshToken
+            };
+            
+            req.setHeader('Content-Type', 'application/x-www-form-urlencoded');
+        	req.setMethod('POST');
+        	req.setBody(createURLParameters(body));
+            
+            Http http = new Http(); 
+            HTTPResponse res = http.send(req); 
+            String responseBody = res.getBody(); 
+            
+            System.debug(responseBody);
+            
+            PowerBIResponse pbiResponse = getPowerBiResponse(responseBody);
+            
+            return new Auth.OAuthRefreshResult(pbiResponse.access_token, pbiResponse.refresh_token);
+        }
+             
+        private String createURLParameters( Map<String, Object> data ) {
+            String encodedUrl = '';
+            Boolean manyParameters = data.size() > 1;
+            for( String key : data.keySet() ) {
+                String value = (String) data.get( key );
+                encodedUrl += key + '=' + encodeURLParameter( value );    
+                encodedUrl += manyParameters ? '&' : '';
+            }
+            encodedUrl += manyParameters ? '=' : '';
+            return encodedUrl;
+        }
+      
+		private static String encodeURLParameter( String urlParameter ) {
+            return EncodingUtil.urlEncode( urlParameter, 'UTF-8' );
+        }
+      
+        // Just return the username of the configuration object
+		// If the flow reached this method, signin was successful
+        global Auth.UserData getUserInfo(Map<string,string> authProviderConfiguration, Auth.AuthProviderTokenResponse response) { 
+            String username = authProviderConfiguration.get('Username__c'); 
+            return new Auth.UserData(null, username, username, username, username, 'n/a', null, null, authProvider, null, null); 
+        }
+      
+      	private PowerBIResponse getPowerBiResponse(String response) {
+          PowerBIResponse parsedResponse = (PowerBIResponse) System.JSON.deserialize(response, PowerBIResponse.class);        
+          return parsedResponse;
+        } 
+
+		public class PowerBIResponse {
+          public String access_token;
+          public String refresh_token;
+      }
+}
