@@ -1,0 +1,42 @@
+@isTest
+global class PowerBIMockHttpResponseGenerator implements HttpCalloutMock {
+	public static string ERROR_MESSAGE = 'testErrorMessage';
+
+	protected String accessToken;
+	protected String refreshToken;
+	protected String expectedAccessTokenUrl;
+	protected Boolean isForApiToken;
+	protected Integer code;
+
+	public PowerBIMockHttpResponseGenerator(Integer code, Boolean isForApiToken, String expectedAccessTokenUrl, String accessToken, String refreshToken) {
+		this.accessToken = accessToken;
+		this.refreshToken = refreshToken;
+		this.expectedAccessTokenUrl = expectedAccessTokenUrl;
+		this.isForApiToken = isForApiToken;
+		this.code = code;
+	}
+
+    // Implement this interface method
+    global HTTPResponse respond(HTTPRequest req) {
+		System.assertEquals(expectedAccessTokenUrl, req.getEndpoint());
+
+        // Create a fake response
+        HttpResponse res = new HttpResponse();
+        
+        res.setHeader('Content-Type', 'application/json');
+		if (isForApiToken) {
+			res.setBody('{"token_type":"Bearer","scope":"Content.Create Dashboard.Read.All Data.Alter_Any Dataset.Read.All Dataset.ReadWrite.All Group.Read Group.Read.All Metadata.View_Any Report.Read.All","expires_in":"3599","ext_expires_in":"0","expires_on":"1482242395","not_before":"1482238495","resource":"https://analysis.windows.net/powerbi/api","access_token":"' + this.accessToken + '","refresh_token":"' + this.refreshToken + '","id_token":"idToken"}');
+        }
+		else {
+			if (code == 200) {
+				res.setBody('{"token":"' + accessToken + '"}');
+			}
+			else {
+				res.setStatusCode(code);
+				res.setStatus(ERROR_MESSAGE);
+			}
+		}
+		res.setStatusCode(code);
+        return res;
+    }
+}
