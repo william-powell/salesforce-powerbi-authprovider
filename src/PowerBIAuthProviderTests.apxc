@@ -1,0 +1,144 @@
+@isTest
+private class PowerBIAuthProviderTests {
+
+	@isTest
+	private static void getCustomMetadataType_Returns_CustomMetaDataType() {
+		// Arrange
+		String expectedType = 'PowerBI_Auth_Settings__mdt';
+
+		// Act
+		PowerBIAuthProvider provider = new PowerBIAuthProvider();
+		String actualType = provider.getCustomMetadataType();
+		
+		// Assert
+		System.assertEquals(expectedType, actualType);
+	}
+
+	@isTest
+	private static void initiate_Returns_Correct_PageReference() {
+		// Arrange
+		String expectedClientId = 'testClient';
+		String expectedCallBack = 'testCallback';
+		String expectedResource = PowerBIAuthProvider.POWERBI_RESOURCE_URI;
+		String expectedResponseType = 'code';
+		String expectedState = 'testState';
+		
+		Map<String, String> expectedUrlParams = new Map<String, String> {
+            'client_id' => expectedClientId,
+            'redirect_uri' => expectedCallBack,
+            'resource' => expectedResource,
+            'response_type' => expectedResponseType,
+            'state' => expectedState
+        };
+
+        String auth_url = PowerBIAuthProvider.WINDOWSNET_LOGIN_BASE_ADDRESS + PowerBIAuthProvider.WINDOWSNET_AUTHORIZE_ENDPOINT;
+            
+        PageReference expectedPageRef = new PageReference(auth_url);
+       	expectedPageRef.getParameters().putAll(expectedUrlParams);
+		
+        Map<String, String> authProviderConfig = new Map<String, String> {
+            'ClientId__c' => expectedClientId,
+            'Callback__c' => expectedCallBack
+        };
+            
+           
+		// Act
+		PowerBIAuthProvider provider = new PowerBIAuthProvider();
+		PageReference returnedPageRef = provider.initiate(authProviderConfig, expectedState);
+		
+		// Assert
+		System.assertEquals(expectedPageRef.getUrl(), returnedPageRef.getUrl());
+	}
+
+	@isTest
+	private static void handleCallback_Returns_Proper_AuthTokenResponse() {
+		// Arrange
+		String expectedClientId = 'testClientId';
+		String expectedClientSecret = 'testClientSecret';
+		String expectedUsername = 'testUsername';
+		String expectedPassword = 'testPassword';
+		String expectedTenantId = 'testTenantId';
+		String expectedState = 'testState';
+		
+		String expectedAccessToken = 'expectedAccessToken';
+		String expectedRefreshToken = 'expectedRefreshToken';
+
+		Map<String, String> authProviderConfig = new Map<String, String> {
+            'ClientId__c' => expectedClientId,
+			'ClientSecret__c' => expectedClientSecret,
+            'Username__c' => expectedUsername,
+			'Password__c' => expectedPassword,
+			'TenantId__c' => expectedTenantId
+        };
+            
+		String expectedAccessTokenUrl = PowerBIAuthProvider.WINDOWSNET_LOGIN_BASE_ADDRESS + expectedTenantId + PowerBIAuthProvider.WINDOWSNET_TOKEN_ENDPOINT;
+        
+		Map<String, String> stateUrlParms = new Map<String, String> {
+            'code' => 'someCode',
+            'state' => expectedState
+        };
+        Auth.AuthProviderCallbackState callbackState = 
+			new Auth.AuthProviderCallbackState(null, null, stateUrlParms);
+		 
+		PowerBiMockHttpResponseGenerator fakeResponse = 
+			new PowerBiMockHttpResponseGenerator(200, true, expectedAccessTokenUrl, expectedAccessToken, expectedRefreshToken);
+		Test.setMock(HttpCalloutMock.Class, fakeResponse);
+		
+		// Act		
+		PowerBIAuthProvider provider = new PowerBIAuthProvider();
+		Auth.AuthProviderTokenResponse authProviderResponse = provider.handleCallback(authProviderConfig, callbackState);
+		
+		// Assert
+		System.assertEquals(expectedAccessToken, authProviderResponse.oauthToken);
+		System.assertEquals(expectedRefreshToken, authProviderResponse.oauthSecretOrRefreshToken);
+		System.assertEquals(expectedState, authProviderResponse.state);
+	}
+
+	@isTest
+	private static void refresh_Returns_Proper_OAuthRefreshResult() {
+		// Arrange
+		String expectedClientId = 'testClientId';
+		String expectedClientSecret = 'testClientSecret';
+		String expectedTenantId = 'testTenantId';
+		
+		String expectedAccessToken = 'expectedAccessToken';
+		String expectedRefreshToken = 'expectedRefreshToken';
+
+		Map<String, String> authProviderConfig = new Map<String, String> {
+            'ClientId__c' => expectedClientId,
+			'ClientSecret__c' => expectedClientSecret,
+            'TenantId__c' => expectedTenantId
+        };
+            
+		String expectedAccessTokenUrl = PowerBIAuthProvider.WINDOWSNET_LOGIN_BASE_ADDRESS + expectedTenantId + PowerBIAuthProvider.WINDOWSNET_TOKEN_ENDPOINT;
+        
+		PowerBiMockHttpResponseGenerator fakeResponse = 
+			new PowerBiMockHttpResponseGenerator(200, true, expectedAccessTokenUrl, expectedAccessToken, expectedRefreshToken);
+			
+		Test.setMock(HttpCalloutMock.Class, fakeResponse);
+
+		// Act		
+		PowerBIAuthProvider provider = new PowerBIAuthProvider();
+		Auth.OAuthRefreshResult authProviderResponse = provider.refresh(authProviderConfig, expectedRefreshToken);
+		
+		// Assert
+		System.assertEquals(expectedAccessToken, authProviderResponse.accessToken);
+		System.assertEquals(expectedRefreshToken, authProviderResponse.refreshToken);
+	}
+
+	@isTest
+	private static void getUserInfo_Returns_Proper_UserData() {
+		// Arrange
+		String expectedUsername = 'testUsername';
+
+		Map<String, String> authProviderConfig = new Map<String, String> {
+            'Username__c' => expectedUsername
+        };
+            
+		PowerBIAuthProvider provider = new PowerBIAuthProvider();
+		Auth.UserData authProviderResponse = provider.getUserInfo(authProviderConfig, null);
+		
+		// Assert
+		System.assertEquals(expectedUsername, authProviderResponse.email);
+	}
+}
