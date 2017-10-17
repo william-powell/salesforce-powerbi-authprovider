@@ -31,4 +31,18 @@ public static PowerBIResponse getAccessTokenForTile(string groupId, string dashb
 
     return getPowerBiResponse(res.getBody());
 }
+
+private static PowerBIResponse getPowerBiResponse(String response) {
+    PowerBIResponse parsedResponse = (PowerBIResponse) System.JSON.deserialize(response, PowerBIResponse.class);        
+    return parsedResponse;
+} 
+
+public class PowerBIResponse {
+    @AuraEnabled
+    public String token;
+    @AuraEnabled
+    public String error;
+    @AuraEnabled
+    public String error_description;
+}
 ```
